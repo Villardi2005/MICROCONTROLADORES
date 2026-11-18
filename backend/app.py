@@ -28,6 +28,13 @@ def realizar_compra():
     id_cartao = dados.get("id_cartao")
     pin = dados.get("pin")
     valor = dados.get("valor")
+    id_terminal = dados.get("id_terminal")
+
+    if not isinstance(id_terminal, str) or not id_terminal:
+        return jsonify({
+        "status": "erro",
+        "motivo": "ID do terminal inválido"
+    }), 400
 
     if not isinstance(id_cartao, str) or not id_cartao:
         return jsonify({
@@ -71,13 +78,24 @@ def realizar_compra():
     try:
         conexao.execute("BEGIN IMMEDIATE")
 
+        terminal = conexao.execute("""
+            SELECT * FROM terminais
+            WHERE id_terminal = ?
+        """, (id_terminal,)).fetchone()
+
         cartao = conexao.execute("""
             SELECT * FROM cartoes
             WHERE id_cartao = ?
         """, (id_cartao,)).fetchone()
 
         # Verifica as condições para aprovar a compra
-        if cartao is None:
+        if terminal is None:
+            motivo = "Terminal não autorizado"
+       
+        elif not terminal["ativo"]:
+            motivo = "Terminal inativo"
+
+        elif cartao is None:
             motivo = "Cartão não encontrado"
 
         elif not cartao["ativo"]:

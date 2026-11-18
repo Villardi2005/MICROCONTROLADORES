@@ -34,6 +34,14 @@ def criar_tabelas():
         )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS terminais (
+        id_terminal TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        ativo INTEGER NOT NULL DEFAULT 1
+    )
+    """)
+
     conexao.commit()
     conexao.close()
 
