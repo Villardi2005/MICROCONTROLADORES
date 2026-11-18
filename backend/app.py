@@ -1,16 +1,57 @@
+
 from flask import Flask, jsonify, request
 from werkzeug.security import check_password_hash
 from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
+
 from banco import conectar, criar_tabelas
 
 app = Flask(__name__)
 criar_tabelas()
 
 
+def valor_em_reais(centavos):
+    return round(centavos / 100, 2)
+
+
+def data_atual():
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def formatar_data(data_hora):
+    if not data_hora:
+        return None
+
+    try:
+        data = datetime.fromisoformat(data_hora)
+
+        # Datas antigas do SQLite estavam em UTC
+        if data.tzinfo is None:
+            data = data.replace(tzinfo=timezone.utc)
+
+        return data.isoformat(timespec="seconds")
+
+    except ValueError:
+        return data_hora
+
+
+def padronizar_motivo(motivo):
+    motivos = {
+        "Saldo insuficiente": "saldo_insuficiente",
+        "PIN incorreto": "pin_incorreto",
+        "Cartão não encontrado": "cartao_invalido",
+        "Cartão inativo": "cartao_invalido",
+        "Terminal não autorizado": "terminal_bloqueado",
+        "Terminal inativo": "terminal_bloqueado"
+    }
+
+    return motivos.get(motivo, motivo)
+
+
 @app.route("/", methods=["GET"])
 def inicio():
     return jsonify({
-        "mensagem": "Servidor da maquininha funcionando!",
+        "mensagem": "Servidor da maquininha segura funcionando!",
         "status": "online"
     })
 
@@ -22,33 +63,33 @@ def realizar_compra():
     if not isinstance(dados, dict):
         return jsonify({
             "status": "erro",
-            "motivo": "JSON inválido"
+            "motivo_recusa": "json_invalido"
         }), 400
 
+    id_terminal = dados.get("id_terminal")
     id_cartao = dados.get("id_cartao")
     pin = dados.get("pin")
     valor = dados.get("valor")
-    id_terminal = dados.get("id_terminal")
 
-    if not isinstance(id_terminal, str) or not id_terminal:
-        return jsonify({
-        "status": "erro",
-        "motivo": "ID do terminal inválido"
-    }), 400
-
-    if not isinstance(id_cartao, str) or not id_cartao:
+    if not isinstance(id_terminal, str) or not id_terminal.strip():
         return jsonify({
             "status": "erro",
-            "motivo": "ID do cartão inválido"
+            "motivo_recusa": "terminal_invalido"
+        }), 400
+
+    if not isinstance(id_cartao, str) or not id_cartao.strip():
+        return jsonify({
+            "status": "erro",
+            "motivo_recusa": "cartao_invalido"
         }), 400
 
     if not isinstance(pin, str):
         return jsonify({
             "status": "erro",
-            "motivo": "PIN inválido"
+            "motivo_recusa": "pin_invalido"
         }), 400
 
-    # Converte o valor em reais para centavos
+    # Recebe valor em reais e converte para centavos
     try:
         if isinstance(valor, bool) or not isinstance(
             valor, (int, float, str)
@@ -65,12 +106,12 @@ def realizar_compra():
         if valor_centavos != valor_centavos.to_integral_value():
             raise ValueError()
 
-        valor = int(valor_centavos)
+        valor_centavos = int(valor_centavos)
 
     except (InvalidOperation, ValueError, TypeError):
         return jsonify({
             "status": "erro",
-            "motivo": "Valor inválido"
+            "motivo_recusa": "valor_invalido"
         }), 400
 
     conexao = conectar()
@@ -88,31 +129,24 @@ def realizar_compra():
             WHERE id_cartao = ?
         """, (id_cartao,)).fetchone()
 
-        # Verifica as condições para aprovar a compra
-        if terminal is None:
-            motivo = "Terminal não autorizado"
-       
-        elif not terminal["ativo"]:
-            motivo = "Terminal inativo"
+        # Regras de autorizacao
+        if terminal is None or not terminal["ativo"]:
+            motivo_recusa = "terminal_bloqueado"
 
-        elif cartao is None:
-            motivo = "Cartão não encontrado"
-
-        elif not cartao["ativo"]:
-            motivo = "Cartão inativo"
+        elif cartao is None or not cartao["ativo"]:
+            motivo_recusa = "cartao_invalido"
 
         elif not check_password_hash(cartao["pin_hash"], pin):
-            motivo = "PIN incorreto"
+            motivo_recusa = "pin_incorreto"
 
-        elif cartao["saldo"] < valor:
-            motivo = "Saldo insuficiente"
+        elif cartao["saldo"] < valor_centavos:
+            motivo_recusa = "saldo_insuficiente"
 
         else:
-            motivo = None
+            motivo_recusa = None
 
-        # Aprova ou recusa a compra
-        if motivo is None:
-            novo_saldo = cartao["saldo"] - valor
+        if motivo_recusa is None:
+            novo_saldo = cartao["saldo"] - valor_centavos
 
             conexao.execute("""
                 UPDATE cartoes
@@ -125,29 +159,38 @@ def realizar_compra():
         else:
             status = "recusada"
 
-        # Registra a transação no banco
+        data_hora = data_atual()
+
+        # Registra a transacao
         cursor = conexao.execute("""
             INSERT INTO transacoes
-            (id_cartao, valor, status, motivo)
-            VALUES (?, ?, ?, ?)
-        """, (id_cartao, valor, status, motivo))
+            (id_terminal, id_cartao, valor, status, motivo, data_hora)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            id_terminal,
+            id_cartao,
+            valor_centavos,
+            status,
+            motivo_recusa,
+            data_hora
+        ))
 
-        id_transacao = cursor.lastrowid
+        id_transacao = f"TX{cursor.lastrowid:04d}"
 
         conexao.commit()
 
-        # Monta a resposta da API
         resposta = {
             "id_transacao": id_transacao,
+            "id_terminal": id_terminal,
+            "id_cartao": id_cartao,
+            "valor": valor_em_reais(valor_centavos),
             "status": status,
-            "motivo": motivo,
-            "valor": f"{valor / 100:.2f}"
+            "data_hora": data_hora,
+            "motivo_recusa": motivo_recusa
         }
 
         if status == "aprovada":
-            resposta["saldo_restante"] = (
-                f"{novo_saldo / 100:.2f}"
-            )
+            resposta["saldo_restante"] = valor_em_reais(novo_saldo)
 
         return jsonify(resposta), 200
 
@@ -157,7 +200,7 @@ def realizar_compra():
 
         return jsonify({
             "status": "erro",
-            "motivo": "Erro interno do servidor"
+            "motivo_recusa": "erro_interno"
         }), 500
 
     finally:
@@ -170,8 +213,8 @@ def listar_transacoes():
 
     try:
         transacoes = conexao.execute("""
-            SELECT id, id_cartao, valor, status,
-                   motivo, data_hora
+            SELECT id, id_terminal, id_cartao, valor,
+                   status, motivo, data_hora
             FROM transacoes
             ORDER BY id DESC
         """).fetchall()
@@ -180,12 +223,17 @@ def listar_transacoes():
 
         for transacao in transacoes:
             resultado.append({
-                "id": transacao["id"],
+                "id_transacao": f"TX{transacao['id']:04d}",
+                "id_terminal": transacao["id_terminal"],
                 "id_cartao": transacao["id_cartao"],
-                "valor": f"{transacao['valor'] / 100:.2f}",
+                "valor": valor_em_reais(transacao["valor"]),
                 "status": transacao["status"],
-                "motivo": transacao["motivo"],
-                "data_hora": transacao["data_hora"]
+                "data_hora": formatar_data(
+                    transacao["data_hora"]
+                ),
+                "motivo_recusa": padronizar_motivo(
+                    transacao["motivo"]
+                )
             })
 
         return jsonify(resultado), 200
@@ -213,14 +261,17 @@ def resumo():
         """).fetchone()
 
         return jsonify({
+            "total_vendido": valor_em_reais(
+                dados["total_vendido"]
+            ),
             "total_transacoes": dados["total_transacoes"],
-            "aprovadas": dados["aprovadas"],
-            "recusadas": dados["recusadas"],
-            "total_vendido": f"{dados['total_vendido'] / 100:.2f}"
+            "transacoes_aprovadas": dados["aprovadas"],
+            "transacoes_recusadas": dados["recusadas"]
         }), 200
 
     finally:
         conexao.close()
+
 
 if __name__ == "__main__":
     app.run(
