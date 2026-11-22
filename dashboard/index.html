@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Maquininha Segura</title>
+    <link rel="stylesheet" href="/dashboard/style.css">
+</head>
+<body>
+
+    <h1>Maquininha Segura</h1>
+    <p>Painel de controle de vendas</p>
+
+    <h2>Resumo das vendas</h2>
+
+    <div class="indicadores">
+        <div class="card">
+            <h3>Total vendido</h3>
+            <p id="total_vendido">R$ 0,00</p>
+        </div>
+
+        <div class="card">
+            <h3>Total de transações</h3>
+            <p id="total_transacoes">0</p>
+        </div>
+
+        <div class="card">
+            <h3>Aprovadas</h3>
+            <p id="aprovadas">0</p>
+        </div>
+
+        <div class="card">
+            <h3>Recusadas</h3>
+            <p id="recusadas">0</p>
+        </div>
+    </div>
+
+    <h2>Histórico de transações</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Terminal</th>
+                <th>Valor</th>
+                <th>Status</th>
+                <th>Data</th>
+            </tr>
+        </thead>
+        <tbody id="tabela_transacoes"></tbody>
+    </table>
+
+    <h2>Gráfico de vendas</h2>
+    <div id="grafico"></div>
+
+    <h2>Monitoramento da maquininha</h2>
+    <p>Estado: aguardando integração com os sensores.</p>
+
+    <h2>Alertas de segurança</h2>
+    <p>Os alertas serão integrados na Meta 2.</p>
+
+    <script src="/dashboard/script.js"></script>
+</body>
+</html>

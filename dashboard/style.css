@@ -1,0 +1,65 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f6f8;
+    margin: 30px;
+    color: #333;
+}
+
+h1 {
+    color: #008060;
+}
+
+h2 {
+    margin-top: 35px;
+}
+
+.indicadores {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.card {
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    width: 180px;
+    box-shadow: 0 2px 5px #ddd;
+}
+
+.card p {
+    font-size: 25px;
+    font-weight: bold;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+}
+
+th, td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+}
+
+th {
+    background-color: #008060;
+    color: white;
+}
+
+#grafico {
+    display: flex;
+    align-items: flex-end;
+    gap: 15px;
+    height: 180px;
+    padding: 15px;
+    background-color: white;
+}
+
+.barra {
+    background-color: #008060;
+    width: 65px;
+    min-height: 2px;
+}

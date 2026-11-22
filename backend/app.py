@@ -1,5 +1,7 @@
 
-from flask import Flask, jsonify, request
+#http://127.0.0.1:5000/dashboard
+from pathlib import Path
+from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.security import check_password_hash
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
@@ -272,6 +274,14 @@ def resumo():
     finally:
         conexao.close()
 
+@app.route("/dashboard")
+def dashboard():
+    return send_from_directory("../dashboard", "index.html")
+
+
+@app.route("/dashboard/<path:arquivo>")
+def arquivos_dashboard(arquivo):
+    return send_from_directory("../dashboard", arquivo)
 
 if __name__ == "__main__":
     app.run(
